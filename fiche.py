@@ -7,9 +7,7 @@ def load_first_sheet(input_file):
     try:
         xls = pd.ExcelFile(input_file, engine='openpyxl')
         df_sud = pd.read_excel(xls, sheet_name=xls.sheet_names[0], header=11)
-        print(df_sud.columns)
-
-
+        
         app = xw.App(visible=False)
         wb = app.books.open(input_file)
         ws = wb.sheets[0]
@@ -35,11 +33,9 @@ def load_first_sheet(input_file):
         app.quit()
         
         combined_values = f"{k_values}".strip()
-        print(df_sud.columns)
-        print(df_sud.head())  
+         
         return df_sud, combined_values, h10_value, i10_value, f15_value, g15_value, j15_value, k15_value, l15_value, m15_value, n15_value, o15_value, p15_value, q15_value
     except Exception as e:
-        print(f"Erreur lors du chargement de la feuille : {e}")
         return pd.DataFrame(), '', None, None, None, None, None, None, None, None, None, None, None, None
 
 def extract_values(df_sud):
@@ -120,11 +116,14 @@ def sum_e20_to_e34(ws):
 
 
 def fill_template(row, template_path, output_path, du_value, mois, annee, montant_total, s15_value, w15_value, y15_value, combined_values, h10_value, i10_value, calculated_value, avance_quinzaine):
+    app = None
+    wb_template = None
     try:
         app = xw.App(visible=False)
         wb_template = app.books.open(template_path)
         ws_template = wb_template.sheets[0]
 
+        # Extract values with default fallbacks
         valeur_d45 = row.get('Valeur D45', 0)
         noms_et_prenoms = row.get('Noms et Prénoms', 'Inconnu') or 'Inconnu'
         fonction = row.get('Fonction ', 'Inconnu') or 'Inconnu'
@@ -134,7 +133,6 @@ def fill_template(row, template_path, output_path, du_value, mois, annee, montan
         nbr_jour_travail = row.get('Nbr jour travail', 0)
         abattement = row.get('Abattement', 0)
         nbre_enfants = row.get('Nbre enfants', 0)
-
         prime_chef_antenne = row.get('Prime chef d\'Antenne', 0)
         prime_objectif = row.get('Prime d\'objectif', 0)
         solde_prime_objectif_2023 = row.get('Solde sur prime d\'objectif 2023', 0)
@@ -144,7 +142,7 @@ def fill_template(row, template_path, output_path, du_value, mois, annee, montan
         indemnité_représentation = row.get('Indemnité de Représentation', 0)
         commission_remboursable = row.get('Commission Remboursable', 0)
 
-        # Mettre à jour le modèle avec les valeurs
+        # Update the template with values
         ws_template.range('C14').value = noms_et_prenoms
         ws_template.range('C15').value = fonction
         ws_template.range('D16').value = f"Matricule: {matricule}"
@@ -164,69 +162,78 @@ def fill_template(row, template_path, output_path, du_value, mois, annee, montan
         ws_template.range('E29').value = indemnité_représentation
         ws_template.range('E30').value = commission_remboursable
 
-        # Placer Nbre enfants et Abattement dans C46 et C47
+        # Place Nbre enfants and Abattement in C46 and C47
         ws_template.range('C46').value = nbre_enfants
         ws_template.range('C47').value = abattement
 
-        # Calculer et mettre à jour D45 avec le produit de C46 et C47
+        # Calculate and update D45 with the product of C46 and C47
         d45_value = nbre_enfants * abattement
         ws_template.range('D45').value = d45_value
 
-        # Calculer et mettre à jour E35 avec la somme de E20:E34
+        # Calculate and update E35 with the sum of E20:E34
         e35_value = sum_e20_to_e34(ws_template)
         ws_template.range('E35').value = e35_value
 
-        # Mettre à jour D37 et D39 avec la valeur calculée
+        # Update D37 and D39 with the calculated value
         ws_template.range('D37').value = calculated_value
         ws_template.range('D39').value = calculated_value
 
-        # Calculer la somme de D37 et D39, puis la placer dans D41
+        # Calculate the sum of D37 and D39, then place in D41
         d37_value = ws_template.range('D37').value
         d39_value = ws_template.range('D39').value
         d41_value = d37_value + d39_value
         ws_template.range('D41').value = d41_value
 
-        # Placer W15 dans E43
+        # Place W15 in E43
         ws_template.range('E43').value = w15_value
 
-        # Placer Y15 dans D44
+        # Place Y15 in D44
         ws_template.range('D44').value = y15_value
 
-        # Nouvelle étape : Calculer la différence entre D44 et D45 et placer la valeur dans D48
+        # New step: Calculate the difference between D44 and D45 and place value in D48
         d44_value = ws_template.range('D44').value
         d48_value = d44_value - d45_value
         ws_template.range('D48').value = d48_value
 
-        # **Nouvelle étape : Insérer "Avance quinzaine" dans D50**
+        # New step: Insert "Avance quinzaine" into D50
         if pd.isna(avance_quinzaine) or avance_quinzaine == '':
             avance_quinzaine = 0
         ws_template.range('D50').value = avance_quinzaine
 
         output_file = os.path.join(output_path, f"{noms_et_prenoms}_{matricule}.xlsx")
         wb_template.save(output_file)
-        wb_template.close()
-        app.quit()
         print(f"Fiche enregistrée : {output_file}")
+
     except Exception as e:
-        print(f"Erreur lors du remplissage du modèle : {e}")
+        # Handle exceptions without printing to the console
+        pass
+    finally:
+        # Ensure resources are cleaned up properly
+        if wb_template:
+            try:
+                wb_template.close()
+            except Exception as e:
+                pass
+        if app:
+            try:
+                app.quit()
+            except Exception as e:
+                pass
 
 def display_columns(df_sud):
     try:
         if not df_sud.empty:
-            if 'Nbre enfants' in df_sud.columns and 'Abattement' in df_sud.columns:
-                for index, row in df_sud.iterrows():
-                    print(f"Nom: {row.get('Noms et Prénoms', 'Inconnu')}, Nbre enfants: {row.get('Nbre enfants', 0)}, Abattement: {row.get('Abattement', 0)}")
-            else:
-                print("Les colonnes 'Nbre enfants' ou 'Abattement' sont absentes du DataFrame.")
+            for index, row in df_sud.iterrows():
+                noms_et_prenoms = row.get('Noms et Prénoms', 'Inconnu')
+                nbre_enfants = row.get('Nbre enfants', 0)
+                abattement = row.get('Abattement', 0)
+
+                # Only print rows where 'Noms et Prénoms' is not NaN
+                if pd.notna(noms_et_prenoms):
+                    print(f"Traitement en cours du fiche de paie de : {noms_et_prenoms}")
     except Exception as e:
         print(f"Erreur lors de l'affichage des colonnes : {e}")
 
-
-
-import os
-import math
-import pandas as pd
-import xlwings as xw
 
 def process_files(input_dir, template_path, output_path):
     for file_name in os.listdir(input_dir):
@@ -252,24 +259,17 @@ def process_files(input_dir, template_path, output_path):
             # Calculer la somme de montant_total et j15_to_q15_sum
             R15 = montant_total + j15_to_q15_sum
 
-            # Affichage des valeurs J15 à Q15, de leur somme et de la somme totale
-            print(f"Valeurs J15 à Q15 : J15={j15_value}, K15={k15_value}, L15={l15_value}, M15={m15_value}, N15={n15_value}, O15={o15_value}, P15={p15_value}, Q15={q15_value}")
-            print(f"Somme de J15 à Q15 : {j15_to_q15_sum}")
-            print(f"Montant total : {montant_total}")
-            print(f"Somme totale (Montant total + Somme J15 à Q15) : {R15}")
-
             # Calculer et afficher la valeur selon la formule donnée
             calculated_value = min(R15 * 0.01, 20000)
-            print(f"Valeur calculée selon la formule : {calculated_value}")
+            
 
             # Calculer la formule R15 - calculated_value - calculated_value
             W15 = R15 - calculated_value - calculated_value
-            print(f"Résultat de la formule R15 - calculated_value - calculated_value : {W15}")
+          
 
             # Calculer ARRONDI.INF(W15; -2)
             X15 = math.floor(W15 / 100) * 100
-            print(f"Valeur arrondie (ARRONDI.INF) : {X15}")
-
+            
             # Calculer la formule complexe pour la valeur de X15
             if X15 <= 400000:
                 Y15 = max(5 * (X15 - 350000) / 100, 3000)
@@ -280,14 +280,11 @@ def process_files(input_dir, template_path, output_path):
             else:
                 Y15 = max(((X15 - 600000) * 20 / 100) + 27500, 3000)
 
-            # Afficher la valeur calculée
-            print(f"Valeur calculée selon MAX(SI(...)) : {Y15}")
 
             for index, row in df_sud.iterrows():
                 # Extraire la valeur de la colonne 'Avance quinzaine'
                 avance_quinzaine = row.get('Avance quinzaine', 0)
-                print(f"Avance quinzaine : {avance_quinzaine}")
-
+                
                 fill_template(row, template_path, output_path, du_value, mois, annee, montant_total, S15, W15, Y15, combined_values, h10_value, i10_value, calculated_value, avance_quinzaine)
 
 
