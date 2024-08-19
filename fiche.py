@@ -7,6 +7,8 @@ def load_first_sheet(input_file):
     try:
         xls = pd.ExcelFile(input_file, engine='openpyxl')
         df_sud = pd.read_excel(xls, sheet_name=xls.sheet_names[0], header=11)
+        print(df_sud.columns)
+
 
         app = xw.App(visible=False)
         wb = app.books.open(input_file)
@@ -115,7 +117,9 @@ def sum_e20_to_e34(ws):
         print(f"Erreur lors du calcul de la somme pour E35 : {e}")
         return 0
 
-def fill_template(row, template_path, output_path, du_value, mois, annee, montant_total, s15_value, w15_value, y15_value, combined_values, h10_value, i10_value, calculated_value):
+
+
+def fill_template(row, template_path, output_path, du_value, mois, annee, montant_total, s15_value, w15_value, y15_value, combined_values, h10_value, i10_value, calculated_value, avance_quinzaine):
     try:
         app = xw.App(visible=False)
         wb_template = app.books.open(template_path)
@@ -140,7 +144,7 @@ def fill_template(row, template_path, output_path, du_value, mois, annee, montan
         indemnité_représentation = row.get('Indemnité de Représentation', 0)
         commission_remboursable = row.get('Commission Remboursable', 0)
 
-        # Update template with values
+        # Mettre à jour le modèle avec les valeurs
         ws_template.range('C14').value = noms_et_prenoms
         ws_template.range('C15').value = fonction
         ws_template.range('D16').value = f"Matricule: {matricule}"
@@ -188,10 +192,15 @@ def fill_template(row, template_path, output_path, du_value, mois, annee, montan
         # Placer Y15 dans D44
         ws_template.range('D44').value = y15_value
 
-        # **Nouvelle étape : Calculer la différence entre D44 et D45 et placer la valeur dans D48**
+        # Nouvelle étape : Calculer la différence entre D44 et D45 et placer la valeur dans D48
         d44_value = ws_template.range('D44').value
         d48_value = d44_value - d45_value
         ws_template.range('D48').value = d48_value
+
+        # **Nouvelle étape : Insérer "Avance quinzaine" dans D50**
+        if pd.isna(avance_quinzaine) or avance_quinzaine == '':
+            avance_quinzaine = 0
+        ws_template.range('D50').value = avance_quinzaine
 
         output_file = os.path.join(output_path, f"{noms_et_prenoms}_{matricule}.xlsx")
         wb_template.save(output_file)
@@ -213,6 +222,11 @@ def display_columns(df_sud):
         print(f"Erreur lors de l'affichage des colonnes : {e}")
 
 
+
+import os
+import math
+import pandas as pd
+import xlwings as xw
 
 def process_files(input_dir, template_path, output_path):
     for file_name in os.listdir(input_dir):
@@ -258,19 +272,23 @@ def process_files(input_dir, template_path, output_path):
 
             # Calculer la formule complexe pour la valeur de X15
             if X15 <= 400000:
-                 Y15 = max(5 * (X15 - 350000) / 100, 3000)
+                Y15 = max(5 * (X15 - 350000) / 100, 3000)
             elif X15 <= 500000:
-                 Y15 = max(((X15 - 400000) * 10 / 100) + 2500, 3000)
+                Y15 = max(((X15 - 400000) * 10 / 100) + 2500, 3000)
             elif X15 <= 600000:
-                 Y15 = max(((X15 - 500000) * 15 / 100) + 12500, 3000)
+                Y15 = max(((X15 - 500000) * 15 / 100) + 12500, 3000)
             else:
-                 Y15 = max(((X15 - 600000) * 20 / 100) + 27500, 3000)
+                Y15 = max(((X15 - 600000) * 20 / 100) + 27500, 3000)
 
             # Afficher la valeur calculée
             print(f"Valeur calculée selon MAX(SI(...)) : {Y15}")
 
             for index, row in df_sud.iterrows():
-                fill_template(row, template_path, output_path, du_value, mois, annee, montant_total, S15, W15, Y15, combined_values, h10_value, i10_value, calculated_value)
+                # Extraire la valeur de la colonne 'Avance quinzaine'
+                avance_quinzaine = row.get('Avance quinzaine', 0)
+                print(f"Avance quinzaine : {avance_quinzaine}")
+
+                fill_template(row, template_path, output_path, du_value, mois, annee, montant_total, S15, W15, Y15, combined_values, h10_value, i10_value, calculated_value, avance_quinzaine)
 
 
 # Exécution du script
